@@ -79,9 +79,102 @@ def load_assets():
 
 
 # =========================
-# CẬP NHẬT ATS
+# ATS THÔNG MINH (AI-LIKE SCORING)
 # =========================
-def update_ats(asset_id, minus):
+
+def calculate_ats(asset_id):
+
+    ATS = 100
+    wrong_room = 0
+    damage = 0
+    scans = 0
+
+    current_year = datetime.now().year
+    age = 0
+
+    # ĐỌC LỊCH SỬ SCAN
+    if os.path.exists("scan_history.csv"):
+
+        with open("scan_history.csv", newline="", encoding="utf-8") as f:
+
+            reader = csv.DictReader(f)
+
+            for row in reader:
+
+                if row["asset_id"] == asset_id:
+                    scans += 1
+
+    # ĐỌC ALERTS
+    if os.path.exists("alerts.csv"):
+
+        with open("alerts.csv", newline="", encoding="utf-8") as f:
+
+            reader = csv.DictReader(f)
+
+            for row in reader:
+
+                if row["asset_id"] == asset_id:
+
+                    if row["type_alert"] == "wrong_room":
+                        wrong_room += 1
+
+                    if row["type_alert"] == "damage":
+                        damage += 1
+
+    # ĐỌC TUỔI TÀI SẢN
+    if os.path.exists("aims.csv"):
+
+        with open("aims.csv", newline="", encoding="utf-8") as f:
+
+            reader = csv.DictReader(f)
+
+            for row in reader:
+
+                if row["ID_assets"] == asset_id:
+
+                    try:
+                        year = int(row.get("Year", current_year))
+                        age = current_year - year
+                    except:
+                        age = 0
+
+    # RISK SAI PHÒNG
+    room_risk = min(wrong_room * 8, 40)
+
+    # RISK BÁO HỎNG
+    damage_risk = min(damage * 12, 50)
+
+    # RISK SCAN BẤT THƯỜNG
+    if scans > 50:
+        scan_risk = 25
+    elif scans > 20:
+        scan_risk = 10
+    else:
+        scan_risk = 0
+
+    # RISK TUỔI TÀI SẢN
+    if age > 10:
+        age_risk = 20
+    elif age > 5:
+        age_risk = 10
+    else:
+        age_risk = 0
+
+    # TÍNH ATS
+    ATS = 100 - room_risk - damage_risk - scan_risk - age_risk
+
+    ATS = max(0, min(100, ATS))
+
+    return ATS
+
+
+# =========================
+# CẬP NHẬT ATS VÀO aims.csv
+# =========================
+
+def update_ats(asset_id, minus=0):
+
+    ats = calculate_ats(asset_id)
 
     rows = []
 
@@ -93,18 +186,13 @@ def update_ats(asset_id, minus):
 
             if row.get("ID_assets", "").strip() == asset_id.strip():
 
-                ats = int(row.get("ATS", 100))
-                ats = max(0, ats - minus)
-
                 row["ATS"] = str(ats)
 
             rows.append(row)
 
     with open("aims.csv", "w", newline="", encoding="utf-8") as f:
 
-        fieldnames = rows[0].keys()
-
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
 
         writer.writeheader()
         writer.writerows(rows)
@@ -402,5 +490,6 @@ def delete_abnormal():
 if __name__ == "__main__":
 
     port = int(os.environ.get("PORT", 5000))
+
 
     app.run(host="0.0.0.0", port=port, debug=True)
